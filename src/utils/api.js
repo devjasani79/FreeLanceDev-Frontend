@@ -1,8 +1,13 @@
-import axios from 'axios';
+import axios from "axios";
+
+const baseURL =
+  process.env.NODE_ENV === "production"
+    ? process.env.NEXT_PUBLIC_API_BASE_URL
+    : process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL;
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
-  withCredentials: true, // needed if using cookies
+  baseURL,
+  withCredentials: true, // use if your backend needs cookies/auth
 });
 
 export default api;

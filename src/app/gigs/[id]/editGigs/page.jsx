@@ -23,9 +23,11 @@ export default function EditGigPage() {
     revisions: '',
   });
 
-  const [images, setImages] = useState([]); // new images to upload
+  const [existingThumbnail, setExistingThumbnail] = useState(null);
   const [existingImages, setExistingImages] = useState([]); // current gig images
-  const [imagesToDelete, setImagesToDelete] = useState([]); // old images marked for deletion
+  const [imagesToDelete, setImagesToDelete] = useState([]); // images marked for deletion
+  const [newThumbnail, setNewThumbnail] = useState(null);   // new thumbnail to upload
+  const [newImages, setNewImages] = useState([]);           // new images to upload
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -48,14 +50,15 @@ export default function EditGigPage() {
         setForm({
           title: gig.title,
           desc: gig.desc,
-          price: gig.price,
+          price: gig.pricePlans?.[0]?.price || '',
           category: gig.category,
           keywords: gig.keywords.join(', '),
-          deliveryTime: gig.deliveryTime,
-          revisions: gig.revisions,
+          deliveryTime: gig.pricePlans?.[0]?.deliveryTime || '',
+          revisions: gig.pricePlans?.[0]?.revisions || '',
         });
 
-        setExistingImages(gig.images || []);
+        setExistingThumbnail(gig.gigThumbnail);
+        setExistingImages(gig.gigImages || []);
       } catch (err) {
         console.error('Failed to load gig', err);
         setError('Failed to load gig details');
@@ -71,7 +74,7 @@ export default function EditGigPage() {
 
   if (!user || user.role !== 'freelancer') {
     return (
-      <div className="p-6 max-w-xl mx-auto text-center text-red-600">
+      <div className="p-6 max-w-xl mx-auto text-center text-red-600 font-semibold">
         Access denied: Only freelancers can edit gigs.
       </div>
     );
@@ -84,22 +87,20 @@ export default function EditGigPage() {
     }));
   };
 
-  const handleImageChange = (e) => {
-    setImages([...e.target.files]);
+  const handleNewThumbnailChange = (e) => {
+    if (e.target.files.length > 0) setNewThumbnail(e.target.files[0]);
+    else setNewThumbnail(null);
   };
 
-  // Handler to mark existing image for deletion
+  const handleNewImagesChange = (e) => {
+    setNewImages([...e.target.files]);
+  };
+
   const toggleImageToDelete = (imgUrl) => {
     setImagesToDelete((prev) =>
       prev.includes(imgUrl) ? prev.filter((img) => img !== imgUrl) : [...prev, imgUrl]
     );
   };
-
-  // Carousel with simple prev/next logic:
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const nextImage = () => setCarouselIndex((i) => (i + 1) % existingImages.length);
-  const prevImage = () =>
-    setCarouselIndex((i) => (i - 1 + existingImages.length) % existingImages.length);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -112,14 +113,13 @@ export default function EditGigPage() {
       formData.append('desc', form.desc);
       formData.append('price', parseFloat(form.price));
       formData.append('category', form.category);
+      formData.append('keywords', form.keywords);
       formData.append('deliveryTime', parseInt(form.deliveryTime, 10));
       formData.append('revisions', parseInt(form.revisions || '0', 10));
-      formData.append('keywords', form.keywords);
-
       formData.append('imagesToDelete', JSON.stringify(imagesToDelete));
 
-      // Append new images (optional)
-      images.forEach((file) => formData.append('images', file));
+      if (newThumbnail) formData.append('gigThumbnail', newThumbnail);
+      newImages.forEach((file) => formData.append('gigImages', file));
 
       await api.put(`/gigs/${id}`, formData, {
         headers: {
@@ -138,16 +138,21 @@ export default function EditGigPage() {
     }
   };
 
+  // Carousel logic to show existing images with navigation and deletion state
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const nextImage = () => setCarouselIndex((i) => (i + 1) % existingImages.length);
+  const prevImage = () => setCarouselIndex((i) => (i - 1 + existingImages.length) % existingImages.length);
+
   return (
-    <div className="max-w-2xl mx-auto p-8">
+    <div className="max-w-2xl mx-auto p-8 bg-white rounded-md shadow-md">
       <h1 className="text-2xl font-bold mb-6">Edit Gig</h1>
 
       {error && (
-        <div className="mb-4 text-red-600 bg-red-100 p-2 rounded">{error}</div>
+        <div className="mb-4 p-3 text-red-700 bg-red-100 rounded">{error}</div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Text Fields... */}
+        {/* Title */}
         <input
           type="text"
           name="title"
@@ -158,16 +163,18 @@ export default function EditGigPage() {
           className="input"
         />
 
+        {/* Description */}
         <textarea
           name="desc"
           placeholder="Gig Description"
           value={form.desc}
           onChange={handleChange}
           required
-          className="input resize-none"
           rows={4}
+          className="input resize-none"
         />
 
+        {/* Price */}
         <input
           type="number"
           name="price"
@@ -179,6 +186,7 @@ export default function EditGigPage() {
           className="input"
         />
 
+        {/* Category */}
         <select
           name="category"
           value={form.category}
@@ -194,6 +202,7 @@ export default function EditGigPage() {
           ))}
         </select>
 
+        {/* Keywords */}
         <input
           type="text"
           name="keywords"
@@ -203,6 +212,7 @@ export default function EditGigPage() {
           className="input"
         />
 
+        {/* Delivery Time */}
         <input
           type="number"
           name="deliveryTime"
@@ -214,6 +224,7 @@ export default function EditGigPage() {
           className="input"
         />
 
+        {/* Revisions */}
         <input
           type="number"
           name="revisions"
@@ -224,10 +235,34 @@ export default function EditGigPage() {
           className="input"
         />
 
-        {/* Existing Images Carousel with delete mark */}
-        <div>
-          <label className="block mb-2 font-semibold">Existing Images</label>
+        {/* Existing Thumbnail preview */}
+        <div className="mb-4">
+          <label className="block font-semibold mb-1">Existing Thumbnail</label>
+          {existingThumbnail ? (
+            <img
+              src={existingThumbnail}
+              alt="Existing Thumbnail"
+              className="w-48 h-48 object-cover rounded"
+              loading="lazy"
+            />
+          ) : (
+            <p>No thumbnail uploaded</p>
+          )}
+        </div>
 
+        {/* Upload New Thumbnail */}
+        <label className="block mb-2 font-semibold">Replace Gig Thumbnail (optional)</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleNewThumbnailChange}
+          className="input mb-4"
+        />
+        {newThumbnail && <p className="text-sm text-gray-700 mb-4 select-text">Selected: {newThumbnail.name}</p>}
+
+        {/* Existing Images Carousel */}
+        <div className="mb-4">
+          <label className="block font-semibold mb-2">Existing Images</label>
           {existingImages.length > 0 ? (
             <div className="relative w-64 h-64 mx-auto">
               <button
@@ -242,11 +277,10 @@ export default function EditGigPage() {
               <img
                 src={existingImages[carouselIndex]}
                 alt={`Existing image ${carouselIndex + 1}`}
-                className={`w-64 h-64 object-cover rounded ${imagesToDelete.includes(
-                  existingImages[carouselIndex]
-                )
-                  ? 'opacity-50 grayscale'
-                  : ''
+                className={`w-64 h-64 object-cover rounded ${
+                  imagesToDelete.includes(existingImages[carouselIndex])
+                    ? 'opacity-50 grayscale'
+                    : ''
                 }`}
                 loading="lazy"
               />
@@ -275,29 +309,27 @@ export default function EditGigPage() {
           )}
         </div>
 
-        {/* New Images Input */}
-        <div>
-          <label className="block mb-2 font-semibold" htmlFor="images">
-            Add New Images (optional)
-          </label>
-          <input
-            type="file"
-            name="images"
-            id="images"
-            multiple
-            accept="image/*"
-            onChange={handleImageChange}
-            className="input"
-          />
-          {images.length > 0 && (
-            <p className="mt-2 text-sm text-gray-600">{images.length} image(s) selected</p>
-          )}
-        </div>
+        {/* Upload New Images */}
+        <label className="block mb-2 font-semibold" htmlFor="images">
+          Add New Images (optional)
+        </label>
+        <input
+          type="file"
+          name="images"
+          id="images"
+          multiple
+          accept="image/*"
+          onChange={handleNewImagesChange}
+          className="input"
+        />
+        {newImages.length > 0 && (
+          <p className="mt-2 text-sm text-gray-600 select-text">{newImages.length} image(s) selected</p>
+        )}
 
         <button
           type="submit"
           disabled={submitting}
-          className="btn bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded"
+          className="btn bg-gray-900 hover:bg-gray-800 text-white font-semibold px-6 py-3 rounded"
         >
           {submitting ? <Spinner /> : 'Update Gig'}
         </button>
