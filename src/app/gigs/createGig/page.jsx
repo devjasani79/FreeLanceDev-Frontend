@@ -19,6 +19,7 @@ const categories = [
 export default function CreateGigPage() {
   const { token, user, loading: authLoading } = useContext(AuthContext);
   const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [thumbnail, setThumbnail] = useState(null);
   const [images, setImages] = useState([]);
@@ -49,26 +50,40 @@ export default function CreateGigPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (user?.role !== 'freelancer') return;
     if (!thumbnail) {
-      alert('Please select a thumbnail image.');
+      alert('Please select a gig thumbnail image.');
       return;
     }
+
     setLoading(true);
+
     try {
       const formData = new FormData();
-      Object.entries(form).forEach(([key, value]) => formData.append(key, value));
+
+      // Append simple form fields
+      Object.entries(form).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          formData.append(key, value);
+        }
+      });
+
+      // Append files separately under the exact field names your backend expects
       formData.append('gigThumbnail', thumbnail);
       images.forEach((file) => formData.append('gigImages', file));
+
       await api.post('/gigs', formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
         },
       });
+
       router.push('/gigs');
     } catch (err) {
-      alert('Error creating gig');
+      alert('Error creating gig. Please check your inputs and try again.');
+      console.error('Create Gig Error:', err);
     } finally {
       setLoading(false);
     }
@@ -90,7 +105,7 @@ export default function CreateGigPage() {
       <h1 className="text-4xl font-extrabold text-gray-900 mb-8 select-none tracking-tight">
         Create a New Gig
       </h1>
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         {/* Title */}
         <label className="block">
           <span className="text-gray-700 font-semibold mb-1 block">Gig Title</span>
