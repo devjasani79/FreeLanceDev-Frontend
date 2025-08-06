@@ -1,11 +1,10 @@
 // src/app/layout.js
 import './globals.css';
 import { Inter } from 'next/font/google';
-import { AuthContext } from '@/context/AuthContext';
+import { AuthProvider } from '@/context/AuthContext';
 
-// Load a modern, corporate font
+// Load modern Google font
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
-
 
 export const metadata = {
   title: 'FreeLanceDev | Find Top Freelance Talent',
@@ -21,13 +20,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className="scroll-smooth">
       <head>
-        {/* Fallback if Next.js metadata fails */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body
-        className={`${inter.variable} font-sans bg-gray-50 text-gray-900 antialiased min-h-screen`}
+        className={`${inter.className} font-sans bg-gray-50 text-gray-900 antialiased min-h-screen`}
       >
-        <AuthContext>{children}</AuthContext>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

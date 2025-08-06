@@ -4,7 +4,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import api from '@/utils/api';
 import Spinner from '@/components/Spinner';
 import { AuthContext } from '@/context/AuthContext';
@@ -115,6 +115,12 @@ export default function CreateGigPage() {
       setServerError(err.response?.data?.error || 'Unexpected error occurred.');
     }
   };
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login');
+    }
+  }, [user, router]);
 
   return (
     <div className="max-w-3xl mx-auto mt-10 p-8 bg-white rounded shadow">

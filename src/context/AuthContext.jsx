@@ -1,4 +1,3 @@
-// context/AuthContext.js
 'use client';
 
 import { createContext, useState, useEffect } from 'react';
@@ -11,27 +10,29 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  
   useEffect(() => {
     const storedToken = typeof window !== 'undefined' && localStorage.getItem('token');
     if (storedToken) {
-      api
-        .get('/auth/me', {
-          headers: { Authorization: `Bearer ${storedToken}` },
-        })
-        .then((res) => {
-          setUser(res.data);
-          setToken(storedToken);
-          localStorage.setItem('user', JSON.stringify(res.data));
-        })
-        .catch(() => {
-          logout();
-        })
-        .finally(() => setLoading(false));
+      setToken(storedToken);
+      fetchUser(storedToken);
     } else {
       setLoading(false);
     }
   }, []);
+
+  const fetchUser = async (authToken) => {
+    try {
+      const res = await api.get('/auth/me', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setUser(res.data.user);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    } catch (err) {
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const login = (userData, authToken) => {
     localStorage.setItem('user', JSON.stringify(userData));
