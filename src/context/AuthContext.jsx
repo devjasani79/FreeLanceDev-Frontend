@@ -11,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  
   useEffect(() => {
     const storedToken = typeof window !== 'undefined' && localStorage.getItem('token');
     if (storedToken) {
