@@ -1,20 +1,40 @@
 @import "tailwindcss";
-
 html,
 body {
-  font-family: 'Inter', sans-serif;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  @apply m-0 p-0 min-h-screen bg-gray-50 text-gray-900 font-sans;
+   @apply bg-gray-50 text-gray-900;
+  font-family: var(--font-inter);
 }
 
 ::selection {
   background-color: rgba(99, 102, 241, 0.4);
 }
-.input {
-  @apply w-full p-2 border rounded focus:outline-none focus:ring focus:ring-indigo-200;
+
+/* Reusable UI styles */
+.input-primary {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400;
 }
 
-.btn {
-  @apply bg-indigo-600 text-white font-semibold px-4 py-2 rounded hover:bg-indigo-700;
+.btn-primary {
+  @apply inline-block px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4B5563 #1F2937;
+}
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #4B5563;
+  border-radius: 8px;
+}
+.btn-secondary {
+  @apply inline-block px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition;
+}
+
+.container {
+  @apply max-w-7xl mx-auto px-4;
 }

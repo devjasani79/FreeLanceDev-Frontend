@@ -1,1 +1,1 @@
-export { default } from './gigs/page';
+export { default } from './login/page.jsx';

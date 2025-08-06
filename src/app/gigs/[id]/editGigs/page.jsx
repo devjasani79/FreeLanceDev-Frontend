@@ -1,339 +1,293 @@
 'use client';
 
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/utils/api';
 import { AuthContext } from '@/context/AuthContext';
 import Spinner from '@/components/Spinner';
 
-const categories = ['design', 'development', 'marketing', 'business', 'writing', 'video', 'music'];
-
 export default function EditGigPage() {
-  const { id } = useParams();
-  const { user, token, loading: authLoading } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const router = useRouter();
+  const { id } = useParams();
 
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     title: '',
     desc: '',
-    price: '',
     category: '',
     keywords: '',
-    deliveryTime: '',
-    revisions: '',
+    pricePlans: [],
+    faqs: [],
+    requirements: [],
   });
 
-  const [existingThumbnail, setExistingThumbnail] = useState(null);
-  const [existingImages, setExistingImages] = useState([]); // current gig images
-  const [imagesToDelete, setImagesToDelete] = useState([]); // images marked for deletion
-  const [newThumbnail, setNewThumbnail] = useState(null);   // new thumbnail to upload
-  const [newImages, setNewImages] = useState([]);           // new images to upload
-
+  const [thumbnail, setThumbnail] = useState(null);
+  const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!token) return;
-
     const fetchGig = async () => {
       try {
         const res = await api.get(`/gigs/${id}`);
         const gig = res.data;
-
-        if (user?._id !== gig.user._id) {
-          alert('You are not authorized to edit this gig');
-          router.push('/gigs');
-          return;
-        }
-
-        setForm({
+        setFormData({
           title: gig.title,
           desc: gig.desc,
-          price: gig.pricePlans?.[0]?.price || '',
           category: gig.category,
           keywords: gig.keywords.join(', '),
-          deliveryTime: gig.pricePlans?.[0]?.deliveryTime || '',
-          revisions: gig.pricePlans?.[0]?.revisions || '',
+          pricePlans: gig.pricePlans || [],
+          faqs: gig.faqs || [],
+          requirements: gig.requirements || [],
         });
-
-        setExistingThumbnail(gig.gigThumbnail);
-        setExistingImages(gig.gigImages || []);
+        setLoading(false);
       } catch (err) {
-        console.error('Failed to load gig', err);
-        setError('Failed to load gig details');
-      } finally {
+        console.error('Failed to fetch gig:', err);
         setLoading(false);
       }
     };
-
     fetchGig();
-  }, [id, token, user, router]);
+  }, [id]);
 
-  if (authLoading || loading) return <Spinner />;
-
-  if (!user || user.role !== 'freelancer') {
-    return (
-      <div className="p-6 max-w-xl mx-auto text-center text-red-600 font-semibold">
-        Access denied: Only freelancers can edit gigs.
-      </div>
-    );
-  }
-
-  const handleChange = (e) => {
-    setForm((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleNewThumbnailChange = (e) => {
-    if (e.target.files.length > 0) setNewThumbnail(e.target.files[0]);
-    else setNewThumbnail(null);
+  const handlePricePlanChange = (index, field, value) => {
+    const updated = [...formData.pricePlans];
+    updated[index][field] = value;
+    setFormData({ ...formData, pricePlans: updated });
   };
 
-  const handleNewImagesChange = (e) => {
-    setNewImages([...e.target.files]);
+  const handleFaqChange = (index, field, value) => {
+    const updated = [...formData.faqs];
+    updated[index][field] = value;
+    setFormData({ ...formData, faqs: updated });
   };
 
-  const toggleImageToDelete = (imgUrl) => {
-    setImagesToDelete((prev) =>
-      prev.includes(imgUrl) ? prev.filter((img) => img !== imgUrl) : [...prev, imgUrl]
-    );
+  const handleRequirementChange = (index, value) => {
+    const updated = [...formData.requirements];
+    updated[index] = value;
+    setFormData({ ...formData, requirements: updated });
+  };
+
+  const addPricePlan = () => {
+    setFormData({
+      ...formData,
+      pricePlans: [...formData.pricePlans, { tier: '', desc: '', deliveryTime: '', revisions: '', price: '', features: '' }],
+    });
+  };
+
+  const addFaq = () => {
+    setFormData({
+      ...formData,
+      faqs: [...formData.faqs, { question: '', answer: '' }],
+    });
+  };
+
+  const addRequirement = () => {
+    setFormData({
+      ...formData,
+      requirements: [...formData.requirements, ''],
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-
     try {
-      const formData = new FormData();
-      formData.append('title', form.title);
-      formData.append('desc', form.desc);
-      formData.append('price', parseFloat(form.price));
-      formData.append('category', form.category);
-      formData.append('keywords', form.keywords);
-      formData.append('deliveryTime', parseInt(form.deliveryTime, 10));
-      formData.append('revisions', parseInt(form.revisions || '0', 10));
-      formData.append('imagesToDelete', JSON.stringify(imagesToDelete));
-
-      if (newThumbnail) formData.append('gigThumbnail', newThumbnail);
-      newImages.forEach((file) => formData.append('gigImages', file));
-
-      await api.put(`/gigs/${id}`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
+      const updatedData = new FormData();
+      Object.entries(formData).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          updatedData.append(key, JSON.stringify(value));
+        } else {
+          updatedData.append(key, value);
+        }
       });
 
-      alert('Gig updated successfully!');
-      router.push('/gigs/manageGigs');
+      if (thumbnail) updatedData.append('gigThumbnail', thumbnail);
+      images.forEach((file) => updatedData.append('gigImages', file));
+
+      const res = await api.put(`/gigs/${id}`, updatedData);
+      router.push(`/gigs/${id}`);
     } catch (err) {
-      console.error('Update gig error:', err);
-      setError(err.response?.data?.message || 'Failed to update gig');
-    } finally {
-      setSubmitting(false);
+      console.error('Error updating gig:', err);
     }
   };
 
-  // Carousel logic to show existing images with navigation and deletion state
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const nextImage = () => setCarouselIndex((i) => (i + 1) % existingImages.length);
-  const prevImage = () => setCarouselIndex((i) => (i - 1 + existingImages.length) % existingImages.length);
+  if (loading) return <Spinner />;
 
   return (
-    <div className="max-w-2xl mx-auto p-8 bg-white rounded-md shadow-md">
-      <h1 className="text-2xl font-bold mb-6">Edit Gig</h1>
+    <div className="bg-gray-50 min-h-screen py-10 px-4 sm:px-8 lg:px-20 xl:px-40">
+      <div className="bg-white rounded-xl shadow-xl p-8 space-y-10">
+        <h1 className="text-3xl font-bold text-gray-900">Edit Gig</h1>
 
-      {error && (
-        <div className="mb-4 p-3 text-red-700 bg-red-100 rounded">{error}</div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Title */}
-        <input
-          type="text"
-          name="title"
-          placeholder="Gig Title"
-          value={form.title}
-          onChange={handleChange}
-          required
-          className="input"
-        />
-
-        {/* Description */}
-        <textarea
-          name="desc"
-          placeholder="Gig Description"
-          value={form.desc}
-          onChange={handleChange}
-          required
-          rows={4}
-          className="input resize-none"
-        />
-
-        {/* Price */}
-        <input
-          type="number"
-          name="price"
-          min="5"
-          placeholder="Price in ₹"
-          value={form.price}
-          onChange={handleChange}
-          required
-          className="input"
-        />
-
-        {/* Category */}
-        <select
-          name="category"
-          value={form.category}
-          onChange={handleChange}
-          required
-          className="input"
-        >
-          <option value="">Select Category</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat.charAt(0).toUpperCase() + cat.slice(1)}
-            </option>
-          ))}
-        </select>
-
-        {/* Keywords */}
-        <input
-          type="text"
-          name="keywords"
-          placeholder="Keywords (comma separated)"
-          value={form.keywords}
-          onChange={handleChange}
-          className="input"
-        />
-
-        {/* Delivery Time */}
-        <input
-          type="number"
-          name="deliveryTime"
-          min="1"
-          placeholder="Delivery Time (days)"
-          value={form.deliveryTime}
-          onChange={handleChange}
-          required
-          className="input"
-        />
-
-        {/* Revisions */}
-        <input
-          type="number"
-          name="revisions"
-          min="0"
-          placeholder="Number of Revisions"
-          value={form.revisions}
-          onChange={handleChange}
-          className="input"
-        />
-
-        {/* Existing Thumbnail preview */}
-        <div className="mb-4">
-          <label className="block font-semibold mb-1">Existing Thumbnail</label>
-          {existingThumbnail ? (
-            <img
-              src={existingThumbnail}
-              alt="Existing Thumbnail"
-              className="w-48 h-48 object-cover rounded"
-              loading="lazy"
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Title</label>
+            <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleInputChange}
+              className="w-full border border-gray-300 p-3 rounded-md shadow-sm"
             />
-          ) : (
-            <p>No thumbnail uploaded</p>
-          )}
-        </div>
+          </div>
 
-        {/* Upload New Thumbnail */}
-        <label className="block mb-2 font-semibold">Replace Gig Thumbnail (optional)</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleNewThumbnailChange}
-          className="input mb-4"
-        />
-        {newThumbnail && <p className="text-sm text-gray-700 mb-4 select-text">Selected: {newThumbnail.name}</p>}
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Description</label>
+            <textarea
+              name="desc"
+              value={formData.desc}
+              onChange={handleInputChange}
+              rows={4}
+              className="w-full border border-gray-300 p-3 rounded-md shadow-sm"
+            />
+          </div>
 
-        {/* Existing Images Carousel */}
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Existing Images</label>
-          {existingImages.length > 0 ? (
-            <div className="relative w-64 h-64 mx-auto">
-              <button
-                type="button"
-                onClick={prevImage}
-                className="absolute top-1/2 left-0 transform -translate-y-1/2 bg-gray-200 hover:bg-gray-300 p-2 rounded"
-                aria-label="Previous image"
-              >
-                ‹
-              </button>
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Category</label>
+            <input
+              type="text"
+              name="category"
+              value={formData.category}
+              onChange={handleInputChange}
+              className="w-full border border-gray-300 p-3 rounded-md shadow-sm"
+            />
+          </div>
 
-              <img
-                src={existingImages[carouselIndex]}
-                alt={`Existing image ${carouselIndex + 1}`}
-                className={`w-64 h-64 object-cover rounded ${
-                  imagesToDelete.includes(existingImages[carouselIndex])
-                    ? 'opacity-50 grayscale'
-                    : ''
-                }`}
-                loading="lazy"
+          {/* Keywords */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Keywords (comma separated)</label>
+            <input
+              type="text"
+              name="keywords"
+              value={formData.keywords}
+              onChange={handleInputChange}
+              className="w-full border border-gray-300 p-3 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* Price Plans */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Price Plans</h2>
+            {formData.pricePlans.map((plan, idx) => (
+              <div key={idx} className="bg-gray-50 border rounded-lg p-4 space-y-3 mb-6">
+                <input
+                  value={plan.tier}
+                  placeholder="Tier"
+                  onChange={(e) => handlePricePlanChange(idx, 'tier', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  value={plan.desc}
+                  placeholder="Description"
+                  onChange={(e) => handlePricePlanChange(idx, 'desc', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  value={plan.price}
+                  placeholder="Price"
+                  onChange={(e) => handlePricePlanChange(idx, 'price', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  value={plan.deliveryTime}
+                  placeholder="Delivery Time"
+                  onChange={(e) => handlePricePlanChange(idx, 'deliveryTime', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  value={plan.revisions}
+                  placeholder="Revisions"
+                  onChange={(e) => handlePricePlanChange(idx, 'revisions', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  value={plan.features}
+                  placeholder="Features (comma separated)"
+                  onChange={(e) => handlePricePlanChange(idx, 'features', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+            ))}
+            <button type="button" onClick={addPricePlan} className="text-blue-600 font-medium hover:underline">
+              + Add Price Plan
+            </button>
+          </div>
+
+          {/* FAQs */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4">FAQs</h2>
+            {formData.faqs.map((faq, idx) => (
+              <div key={idx} className="bg-white border rounded p-4 mb-4">
+                <input
+                  placeholder="Question"
+                  value={faq.question}
+                  onChange={(e) => handleFaqChange(idx, 'question', e.target.value)}
+                  className="w-full p-2 border rounded mb-2"
+                />
+                <textarea
+                  placeholder="Answer"
+                  value={faq.answer}
+                  onChange={(e) => handleFaqChange(idx, 'answer', e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+            ))}
+            <button type="button" onClick={addFaq} className="text-blue-600 font-medium hover:underline">
+              + Add FAQ
+            </button>
+          </div>
+
+          {/* Requirements */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Requirements</h2>
+            {formData.requirements.map((req, idx) => (
+              <input
+                key={idx}
+                value={req}
+                onChange={(e) => handleRequirementChange(idx, e.target.value)}
+                placeholder="Requirement"
+                className="w-full p-2 border rounded mb-2"
               />
+            ))}
+            <button type="button" onClick={addRequirement} className="text-blue-600 font-medium hover:underline">
+              + Add Requirement
+            </button>
+          </div>
 
-              <button
-                type="button"
-                onClick={nextImage}
-                className="absolute top-1/2 right-0 transform -translate-y-1/2 bg-gray-200 hover:bg-gray-300 p-2 rounded"
-                aria-label="Next image"
-              >
-                ›
-              </button>
-
-              <button
-                type="button"
-                onClick={() => toggleImageToDelete(existingImages[carouselIndex])}
-                className={`absolute bottom-2 right-2 px-3 py-1 rounded text-white ${
-                  imagesToDelete.includes(existingImages[carouselIndex]) ? 'bg-red-600' : 'bg-green-600'
-                }`}
-              >
-                {imagesToDelete.includes(existingImages[carouselIndex]) ? 'Undo Remove' : 'Remove'}
-              </button>
+          {/* Uploads */}
+          <div className="space-y-4">
+            <div>
+              <label className="block font-semibold mb-1">Gig Thumbnail</label>
+              <input type="file" accept="image/*" onChange={(e) => setThumbnail(e.target.files?.[0])} />
             </div>
-          ) : (
-            <p className="text-gray-500 mb-4">No images uploaded yet.</p>
-          )}
-        </div>
+            <div>
+              <label className="block font-semibold mb-1">Additional Gig Images</label>
+              <input type="file" accept="image/*" multiple onChange={(e) => setImages(Array.from(e.target.files))} />
+            </div>
+          </div>
 
-        {/* Upload New Images */}
-        <label className="block mb-2 font-semibold" htmlFor="images">
-          Add New Images (optional)
-        </label>
-        <input
-          type="file"
-          name="images"
-          id="images"
-          multiple
-          accept="image/*"
-          onChange={handleNewImagesChange}
-          className="input"
-        />
-        {newImages.length > 0 && (
-          <p className="mt-2 text-sm text-gray-600 select-text">{newImages.length} image(s) selected</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="btn bg-gray-900 hover:bg-gray-800 text-white font-semibold px-6 py-3 rounded"
-        >
-          {submitting ? <Spinner /> : 'Update Gig'}
-        </button>
-      </form>
+          {/* Buttons */}
+          <div className="flex gap-4 pt-6">
+            <button
+              type="submit"
+              className="bg-gray-900 text-white px-6 py-3 rounded-lg hover:bg-gray-800"
+            >
+              Save Changes
+            </button>
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

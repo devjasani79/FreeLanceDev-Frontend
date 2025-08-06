@@ -1,266 +1,222 @@
 'use client';
 
-import { useContext, useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useRouter } from 'next/navigation';
+import { useContext, useState } from 'react';
 import api from '@/utils/api';
-import { AuthContext } from '@/context/AuthContext';
 import Spinner from '@/components/Spinner';
+import { AuthContext } from '@/context/AuthContext';
 
-const categories = [
-  'design',
-  'development',
-  'marketing',
-  'business',
-  'writing',
-  'video',
-  'music',
-];
+const priceTierEnum = z.enum(['Basic', 'Standard', 'Premium']);
+
+const gigSchema = z.object({
+  title: z.string().min(5, 'Title must be at least 5 characters'),
+  desc: z.string().min(10, 'Description must be at least 20 characters'),
+  category: z.string().min(1, 'Category is required'),
+  keywords: z.string().optional(),
+
+  pricePlans: z
+    .array(
+      z.object({
+        tier: priceTierEnum,
+        price: z.string().min(1, 'Price is required'),
+        deliveryTime: z.string().min(1, 'Delivery time is required'),
+        revisions: z.string().min(1, 'Revisions required'),
+        features: z.string().min(1, 'At least one feature is required'),
+      })
+    )
+    .min(1, 'At least one price plan is required'),
+
+  faqs: z
+    .array(
+      z.object({
+        question: z.string().min(5, 'Question too short'),
+        answer: z.string().min(5, 'Answer too short'),
+      })
+    )
+    .optional(),
+
+  requirements: z
+    .array(z.string().min(3, 'Requirement too short'))
+    .min(1, 'At least one requirement is required'),
+
+  gigThumbnail: z.any(),
+  gigImages: z.any().optional(),
+});
 
 export default function CreateGigPage() {
-  const { token, user, loading: authLoading } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const router = useRouter();
+  const [serverError, setServerError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const [loading, setLoading] = useState(false);
-  const [thumbnail, setThumbnail] = useState(null);
-  const [images, setImages] = useState([]);
-  const [form, setForm] = useState({
-    title: '',
-    desc: '',
-    price: '',
-    category: '',
-    keywords: '',
-    deliveryTime: '',
-    revisions: '',
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: zodResolver(gigSchema),
+    defaultValues: {
+      title: '',
+      desc: '',
+      category: '',
+      keywords: '',
+      pricePlans: [{ tier: 'Basic', price: '', deliveryTime: '', revisions: '', features: '' }],
+      faqs: [{ question: '', answer: '' }],
+      requirements: [''],
+      gigThumbnail: null,
+      gigImages: [],
+    },
   });
 
-  const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const { fields: pricePlans, append: addPricePlan } = useFieldArray({ control, name: 'pricePlans' });
+  const { fields: faqs, append: addFaq } = useFieldArray({ control, name: 'faqs' });
+  const { fields: requirements, append: addReq } = useFieldArray({ control, name: 'requirements' });
 
-  const handleThumbnailChange = (e) => {
-    if (e.target.files.length > 0) {
-      setThumbnail(e.target.files[0]);
-    } else {
-      setThumbnail(null);
-    }
-  };
+  const onSubmit = async (data) => {
+    setServerError('');
+    const formData = new FormData();
 
-  const handleImageChange = (e) => {
-    setImages(Array.from(e.target.files));
-  };
+    formData.append('title', data.title);
+    formData.append('desc', data.desc);
+    formData.append('category', data.category);
+    formData.append('keywords', data.keywords || '');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    formData.append('pricePlans', JSON.stringify(data.pricePlans));
+    formData.append('faqs', JSON.stringify(data.faqs));
+    formData.append('requirements', JSON.stringify(data.requirements));
 
-    if (user?.role !== 'freelancer') return;
-    if (!thumbnail) {
-      alert('Please select a gig thumbnail image.');
-      return;
+    if (data.gigThumbnail?.[0]) {
+      formData.append('gigThumbnail', data.gigThumbnail[0]);
     }
 
-    setLoading(true);
+    if (data.gigImages?.length) {
+      for (let img of data.gigImages) {
+        formData.append('gigImages', img);
+      }
+    }
 
     try {
-      const formData = new FormData();
-
-      // Append simple form fields
-      Object.entries(form).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          formData.append(key, value);
-        }
+      const res = await api.post('/gigs', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Append files separately under the exact field names your backend expects
-      formData.append('gigThumbnail', thumbnail);
-      images.forEach((file) => formData.append('gigImages', file));
-
-      await api.post('/gigs', formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      router.push('/gigs');
+      if (res.status === 201) {
+        setSuccessMsg('Gig created successfully!');
+        setTimeout(() => router.push('/dashboard'), 1500);
+      }
     } catch (err) {
-      alert('Error creating gig. Please check your inputs and try again.');
-      console.error('Create Gig Error:', err);
-    } finally {
-      setLoading(false);
+      console.error('❌ Error creating gig:', err);
+      setServerError(err.response?.data?.error || 'Unexpected error occurred.');
     }
   };
 
-  if (authLoading || loading) return <Spinner />;
-  if (user?.role !== 'freelancer') {
-    return (
-      <div className="p-8 max-w-md mx-auto text-center text-gray-700">
-        <p className="text-red-600 font-semibold">
-          Access denied: Only freelancers can create gigs.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white shadow-lg rounded-xl border border-gray-200">
-      <h1 className="text-4xl font-extrabold text-gray-900 mb-8 select-none tracking-tight">
-        Create a New Gig
-      </h1>
-      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+    <div className="max-w-3xl mx-auto mt-10 p-8 bg-white rounded shadow">
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Create a New Gig</h1>
+
+      {serverError && <div className="text-red-600 mb-4">{serverError}</div>}
+      {successMsg && <div className="text-green-600 mb-4">{successMsg}</div>}
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Title */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">Gig Title</span>
-          <input
-            name="title"
-            value={form.title}
-            onChange={handleChange}
-            placeholder="Professional Logo Design"
-            required
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full"
-          />
-        </label>
+        <div>
+          <input {...register('title')} placeholder="Title" className="w-full p-2 border rounded" />
+          {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
+        </div>
 
         {/* Description */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">
-            Description
-          </span>
-          <textarea
-            name="desc"
-            value={form.desc}
-            onChange={handleChange}
-            placeholder="Describe your service..."
-            required
-            rows={4}
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full resize-none"
-          />
-        </label>
-
-        {/* Price */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">Price (₹)</span>
-          <input
-            name="price"
-            type="number"
-            min="5"
-            value={form.price}
-            onChange={handleChange}
-            placeholder="50"
-            required
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full"
-          />
-        </label>
+        <div>
+          <textarea {...register('desc')} rows={4} placeholder="Description" className="w-full p-2 border rounded" />
+          {errors.desc && <p className="text-sm text-red-500">{errors.desc.message}</p>}
+        </div>
 
         {/* Category */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">Category</span>
-          <select
-            name="category"
-            value={form.category}
-            onChange={handleChange}
-            required
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full cursor-pointer"
-          >
+        <div>
+          <select {...register('category')} className="w-full p-2 border rounded">
             <option value="">Select Category</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat.charAt(0).toUpperCase() + cat.slice(1)}
-              </option>
-            ))}
+            <option value="design">Design</option>
+            <option value="development">Development</option>
+            <option value="marketing">Marketing</option>
+            <option value="business">Business</option>
+            <option value="writing">Writing</option>
+            <option value="video">Video</option>
+            <option value="music">Music</option>
           </select>
-        </label>
+          {errors.category && <p className="text-sm text-red-500">{errors.category.message}</p>}
+        </div>
 
         {/* Keywords */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">
-            Keywords (comma separated)
-          </span>
-          <input
-            name="keywords"
-            value={form.keywords}
-            onChange={handleChange}
-            placeholder="logo, branding, design"
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full"
-          />
-        </label>
+        <input {...register('keywords')} placeholder="Keywords (comma separated)" className="w-full p-2 border rounded" />
 
-        {/* Delivery Time */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">
-            Delivery Time (days)
-          </span>
-          <input
-            name="deliveryTime"
-            type="number"
-            min="1"
-            value={form.deliveryTime}
-            onChange={handleChange}
-            placeholder="2"
-            required
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full"
-          />
-        </label>
+        {/* Price Plans */}
+        <div>
+          <h3 className="font-semibold mb-2">Price Plans</h3>
+          {pricePlans.map((plan, idx) => (
+            <div key={plan.id} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-4">
+              <select {...register(`pricePlans.${idx}.tier`)} className="p-2 border rounded">
+                <option value="Basic">Basic</option>
+                <option value="Standard">Standard</option>
+                <option value="Premium">Premium</option>
+              </select>
+              <input {...register(`pricePlans.${idx}.price`)} placeholder="Price" className="p-2 border rounded" />
+              <input {...register(`pricePlans.${idx}.deliveryTime`)} placeholder="Delivery Time" className="p-2 border rounded" />
+              <input {...register(`pricePlans.${idx}.revisions`)} placeholder="Revisions" className="p-2 border rounded" />
+              <input {...register(`pricePlans.${idx}.features`)} placeholder="Features" className="p-2 border rounded" />
+            </div>
+          ))}
+          <button type="button" onClick={() => addPricePlan({ tier: 'Basic', price: '', deliveryTime: '', revisions: '', features: '' })} className="text-sm text-blue-600">
+            + Add another plan
+          </button>
+          {errors.pricePlans && <p className="text-sm text-red-500">{errors.pricePlans.message}</p>}
+        </div>
 
-        {/* Revisions */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">
-            Number of Revisions
-          </span>
-          <input
-            name="revisions"
-            type="number"
-            min="0"
-            value={form.revisions}
-            onChange={handleChange}
-            placeholder="1"
-            className="input border-gray-300 focus:border-gray-700 focus:ring-2 focus:ring-gray-300 transition rounded-md shadow-sm w-full"
-          />
-        </label>
+        {/* FAQs */}
+        <div>
+          <h3 className="font-semibold mb-2">FAQs</h3>
+          {faqs.map((faq, idx) => (
+            <div key={faq.id} className="space-y-1 mb-2">
+              <input {...register(`faqs.${idx}.question`)} placeholder="Question" className="w-full p-2 border rounded" />
+              <input {...register(`faqs.${idx}.answer`)} placeholder="Answer" className="w-full p-2 border rounded" />
+            </div>
+          ))}
+          <button type="button" onClick={() => addFaq({ question: '', answer: '' })} className="text-sm text-blue-600">
+            + Add FAQ
+          </button>
+        </div>
 
-        {/* Thumbnail Upload */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">
-            Gig Thumbnail <span className="text-red-500">*</span>
-          </span>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleThumbnailChange}
-            required
-            className="block w-full cursor-pointer border border-gray-300 rounded-md p-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
-          />
-          {thumbnail && (
-            <p className="mt-1 text-gray-600 text-sm select-text">
-              Selected: {thumbnail.name}
-            </p>
-          )}
-        </label>
+        {/* Requirements */}
+        <div>
+          <h3 className="font-semibold mb-2">Requirements</h3>
+          {requirements.map((req, idx) => (
+            <input key={req.id} {...register(`requirements.${idx}`)} placeholder={`Requirement #${idx + 1}`} className="w-full p-2 border rounded mb-2" />
+          ))}
+          <button type="button" onClick={() => addReq('')} className="text-sm text-blue-600">
+            + Add Requirement
+          </button>
+          {errors.requirements && <p className="text-sm text-red-500">{errors.requirements.message}</p>}
+        </div>
 
-        {/* Additional Images Upload */}
-        <label className="block">
-          <span className="text-gray-700 font-semibold mb-1 block">Additional Images</span>
-          <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={handleImageChange}
-            className="block w-full cursor-pointer border border-gray-300 rounded-md p-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
-          />
-          {images.length > 0 && (
-            <p className="mt-1 text-gray-600 text-sm select-text">
-              {images.length} file{images.length > 1 ? 's' : ''} selected
-            </p>
-          )}
-        </label>
+        {/* Thumbnail */}
+        <div>
+          <label className="block font-medium mb-1">Thumbnail</label>
+          <input type="file" {...register('gigThumbnail')} className="w-full p-2 rounded bg-gray-50" />
+          {errors.gigThumbnail && <p className="text-sm text-red-500">{errors.gigThumbnail.message}</p>}
+        </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 bg-gray-900 text-white font-bold rounded-md shadow-lg
-            hover:bg-gray-800 active:scale-95 transition transform duration-150
-            disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {loading ? <Spinner /> : 'Create Gig'}
+        {/* Images */}
+        <div>
+          <label className="block font-medium mb-1">Additional Images</label>
+          <input type="file" multiple {...register('gigImages')} className="w-full p-2 rounded bg-gray-50" />
+        </div>
+
+        <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+          {isSubmitting ? <Spinner /> : 'Create Gig'}
         </button>
       </form>
     </div>

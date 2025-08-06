@@ -1,3 +1,4 @@
+// context/AuthContext.js
 'use client';
 
 import { createContext, useState, useEffect } from 'react';
@@ -11,8 +12,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
+    const storedToken = typeof window !== 'undefined' && localStorage.getItem('token');
     if (storedToken) {
       api
         .get('/auth/me', {
@@ -24,38 +24,28 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem('user', JSON.stringify(res.data));
         })
         .catch(() => {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
-          setUser(null);
-          setToken(null);
+          logout();
         })
-        .finally(() => {
-          setLoading(false);
-        });
+        .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
   }, []);
 
-  // login method (unchanged)
   const login = (userData, authToken) => {
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', authToken);
     setUser(userData);
     setToken(authToken);
-    setLoading(false);
   };
 
-  // logout method (unchanged)
   const logout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     setUser(null);
     setToken(null);
-    setLoading(false);
   };
 
-  // NEW: method to update user data partially
   const updateUser = (updatedFields) => {
     setUser((prev) => {
       const updatedUser = { ...prev, ...updatedFields };

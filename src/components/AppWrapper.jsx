@@ -1,20 +1,28 @@
 'use client';
 
-import { useContext } from 'react';
-import { usePathname } from 'next/navigation';
+import { useContext, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { AuthContext } from '@/context/AuthContext';
-import Sidebar from '@/components/Sidebar';
+import Sidebar from './Sidebar';
+import Spinner from './Spinner';
 
 const PUBLIC_PATHS = ['/login', '/register', '/reset-password', '/req-reset'];
 
 export default function AppWrapper({ children }) {
-  const { user } = useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext);
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Check if current route is public (no sidebar)
   const isPublic = PUBLIC_PATHS.includes(pathname);
 
-  // Show sidebar only if user is logged in and not on public page
+  useEffect(() => {
+    if (!loading && !user && !isPublic) {
+      router.push('/gigs');
+    }
+  }, [loading, user, isPublic, pathname]);
+
+  if (loading) return <Spinner />;
+
   const showSidebar = user && !isPublic;
 
   return (

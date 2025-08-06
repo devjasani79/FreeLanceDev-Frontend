@@ -1,9 +1,8 @@
-'use client';
-// Modern spinner covers loader
+// components/Spinner.jsx
 export default function Spinner() {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-white/70 z-[9999]">
-      <div className="w-12 h-12 border-4 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
+    <div className="flex justify-center items-center h-screen bg-white">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
     </div>
   );
 }

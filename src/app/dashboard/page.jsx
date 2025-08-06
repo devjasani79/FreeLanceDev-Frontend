@@ -1,104 +1,224 @@
 'use client';
 
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthContext } from '@/context/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Spinner from '@/components/Spinner';
 import Link from 'next/link';
+import api from '@/utils/api';
+import Footer from '@/components/footer';
 
 export default function DashboardPage() {
   const { user, token, loading: authLoading } = useContext(AuthContext);
   const router = useRouter();
 
-  // Redirect to login if user not authenticated
-  useEffect(() => {
-    if (!token) {
-      router.push('/login');
-    }
-  }, [token, router]);
+  const [profile, setProfile] = useState({});
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: '', bio: '', skills: '' });
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
-  if (!user || authLoading)
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Spinner />
-      </div>
-    );
+  useEffect(() => {
+    if (!token) router.push('/login');
+  }, [token]);
+
+  useEffect(() => {
+    if (user) {
+      setProfile(user);
+      setForm({
+        name: user.name || '',
+        bio: user.bio || '',
+        skills: (user.skills || []).join(', '),
+      });
+    }
+  }, [user]);
+
+  if (authLoading || !user) return <Spinner fullScreen />;
+
+  const handleEditToggle = () => {
+    setMessage('');
+    setEditing(!editing);
+  };
+
+  const handleChange = (e) => {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setUpdateLoading(true);
+    setMessage('');
+
+    try {
+      const res = await api.put(
+        '/auth/update',
+        {
+          name: form.name.trim(),
+          bio: form.bio.trim(),
+          skills: form.skills.split(',').map((s) => s.trim()).filter(Boolean),
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setMessage('✅ Profile updated successfully!');
+      setEditing(false);
+    } catch (err) {
+      setMessage(err.response?.data?.msg || '❌ Profile update failed.');
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
+    <div className="flex flex-col min-h-screen bg-gray-100 text-gray-800">
+      <div className="flex flex-1">
+        <Sidebar active="dashboard" />
 
-      <main className="flex-1 ml-0 md:ml-64 p-8 max-w-7xl">
-        <h1 className="text-3xl font-bold mb-6">Welcome, {user.name} 👋</h1>
-        <p className="text-lg text-gray-600 mb-8">
-          You are logged in as a{' '}
-          <span className="font-semibold capitalize text-blue-600">{user.role}</span>.
-        </p>
+        <main className="flex-1 p-6 md:pl-72">
+          <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
-        {/* Quick Action Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {user.role === 'freelancer' && (
-            <>
-              <DashboardCard
-                title="Create Gig"
-                description="Create a new service gig to offer your skills."
-                href="/gigs/createGig"
-              />
-              <DashboardCard
-                title="Manage Gigs"
-                description="View, edit, or delete your existing gigs."
-                href="/gigs/manageGigs"
-              />
-              <DashboardCard
-                title="Orders"
-                description="Track your current orders and earnings."
-                href="/orders" // implement orders later
-              />
-            </>
-          )}
-          {user.role === 'client' && (
-            <>
-              <DashboardCard
-                title="Browse Gigs"
-                description="Explore gigs from freelancers."
-                href="/gigs"
-              />
-              <DashboardCard
-                title="My Orders"
-                description="View your active and past orders."
-                href="/orders" // implement orders later
-              />
-              <DashboardCard
-                title="Messages"
-                description="Chat with freelancers."
-                href="/messages" // implement messaging later
-              />
-            </>
-          )}
-        </section>
+          {/* Profile Section */}
+          <section className="bg-white p-6 rounded-xl shadow-md mb-10">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-semibold">My Profile</h2>
+              <button
+                onClick={handleEditToggle}
+                className="text-sm font-medium text-blue-600 hover:underline"
+              >
+                {editing ? 'Cancel' : 'Edit'}
+              </button>
+            </div>
 
-        <section>
-          {/* You can add recent activity, stats, or news here */}
-          <h2 className="text-2xl font-semibold mb-4">Dashboard Overview</h2>
-          <p className="text-gray-700">
-            Use the links above to get started with your freelance marketplace activities.
-          </p>
-        </section>
-      </main>
+            {message && (
+              <div
+                className={`mb-4 px-4 py-3 rounded-md font-medium ${
+                  message.includes('failed')
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-green-100 text-green-700'
+                }`}
+              >
+                {message}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-5">
+              <InputField
+                label="Name"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                editing={editing}
+              />
+
+              <TextareaField
+                label="Bio"
+                name="bio"
+                value={form.bio}
+                onChange={handleChange}
+                editing={editing}
+              />
+
+              <InputField
+                label="Skills"
+                name="skills"
+                value={form.skills}
+                onChange={handleChange}
+                editing={editing}
+                placeholder="e.g. React, Figma, UI/UX"
+              />
+
+              {editing && (
+                <button
+                  type="submit"
+                  disabled={updateLoading}
+                  className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {updateLoading ? 'Saving...' : 'Save Profile'}
+                </button>
+              )}
+            </form>
+          </section>
+
+          {/* Role-specific Quick Actions */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+            {user.role === 'freelancer' ? (
+              <>
+                <ActionCard title="Create Gig" href="/gigs/createGig" />
+                <ActionCard title="Manage Gigs" href="/gigs/manageGigs" />
+                <ActionCard title="My Orders" href="/orders" />
+              </>
+            ) : (
+              <>
+                <ActionCard title="Browse Gigs" href="/gigs" />
+                <ActionCard title="My Orders" href="/orders" />
+                <ActionCard title="Messages" href="/messages" />
+              </>
+            )}
+          </section>
+
+          {/* Overview Placeholder */}
+          <section className="bg-white p-6 rounded-xl shadow-md">
+            <h2 className="text-xl font-semibold mb-2">Overview</h2>
+            <p className="text-gray-700">
+              Welcome to your dashboard. Use the quick action cards above to manage your activity.
+            </p>
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
 
-function DashboardCard({ title, description, href }) {
+function ActionCard({ title, href }) {
   return (
-    <Link
-      href={href}
-      className="p-6 bg-white rounded-lg shadow-md hover:shadow-xl transition flex flex-col cursor-pointer"
-    >
-      <h3 className="text-xl font-semibold mb-2 text-gray-900">{title}</h3>
-      <p className="text-gray-600 flex-grow">{description}</p>
-      <span className="mt-4 text-blue-600 font-semibold underline">Go &rarr;</span>
+    <Link href={href}>
+      <div className="bg-white p-5 rounded-xl shadow hover:shadow-lg transition cursor-pointer">
+        <h3 className="text-lg font-semibold mb-1">{title}</h3>
+        <span className="text-blue-600 font-bold text-sm">Go →</span>
+      </div>
     </Link>
+  );
+}
+
+function InputField({ label, name, value, onChange, editing, placeholder }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      {editing ? (
+        <input
+          type="text"
+          name={name}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm focus:ring focus:ring-blue-200"
+        />
+      ) : (
+        <p className="text-gray-800">{value || '-'}</p>
+      )}
+    </div>
+  );
+}
+
+function TextareaField({ label, name, value, onChange, editing }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      {editing ? (
+        <textarea
+          name={name}
+          value={value}
+          onChange={onChange}
+          rows={3}
+          className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm focus:ring focus:ring-blue-200"
+        />
+      ) : (
+        <p className="text-gray-800 whitespace-pre-line">{value || '-'}</p>
+      )}
+
+      
+    </div>
+    
   );
 }
