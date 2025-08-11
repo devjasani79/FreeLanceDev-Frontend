@@ -56,8 +56,9 @@ export default function Home() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl mb-8 text-white/90 leading-relaxed animate-slide-in-left">
-              Connect with top clients, showcase your skills, and build a successful freelance career. 
-              Whether you're a designer, developer, writer, or marketer, we have opportunities for you.
+             {` Connect with top clients, showcase your skills, and build a successful freelance career. 
+            Whether you're a designer, developer, writer, or marketer, we have opportunities for you.`
+             }
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-in-right">
